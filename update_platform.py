@@ -15,7 +15,7 @@ root_log.addHandler(handler)
 
 netbox = NetBox(host=config.netbox_host, use_ssl=True, ssl_verify=True, auth_token=config.netbox_token)
 platforms = netbox.dcim.get_platforms()
-devices = netbox.dcim.get_devices(tag='network-riverbed')
+devices = netbox.dcim.get_devices(tag='network-ios-xe')
  
 tag_map = {
     'Network-Arista': 'eos',
@@ -49,7 +49,7 @@ def verify_platform(device):
             log.info(f'{device["name"]}: No platform mapped for tag {tag}, doing nothing')
 
 def verify_all_platforms(devices):
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         return executor.map(verify_platform, devices)
 
 def main():

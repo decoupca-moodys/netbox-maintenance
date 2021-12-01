@@ -1,2 +1,3 @@
 netbox_host = 'netbox.example.net'
 netbox_token = 'read/write token'
+max_workers = 20
