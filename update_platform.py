@@ -13,7 +13,14 @@ formatter = logging.Formatter("%(name)s %(levelname)s: %(message)s")
 handler.setFormatter(formatter)
 root_log.addHandler(handler)
 
-netbox = NetBox(host=config.netbox_host, use_ssl=True, ssl_verify=True, auth_token=config.netbox_token)
+args = {
+    'host': config.netbox_host,
+    'auth_token': config.netbox_token,
+    'use_ssl': True,
+    'ssl_verify': True,
+}
+
+netbox = NetBox(**args)
 platforms = netbox.dcim.get_platforms()
 devices = netbox.dcim.get_devices(tag='network-ios-xe')
  
@@ -24,6 +31,7 @@ tag_map = {
     'Network-Juniper': 'junos',
     'Network-NXOS': 'nxos',
     'Network-Riverbed': 'riverbed',
+    'Network-WLC': 'aireos',
 }
 
 def get_platform_id(platform_slug):
@@ -34,7 +42,7 @@ def get_platform_id(platform_slug):
 
 def verify_platform(device):
     if device['platform']:
-        log.info(f'{device["name"]}: Platform already set, doing nothing')
+        log.info(f'{device["name"]}: Platform already set to "{device["platform"]["slug"]}", doing nothing')
     else:
         tag = device['tags'][0]
         log.debug(f'{device["name"]}: Tag: "{tag}"')
