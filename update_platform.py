@@ -13,7 +13,7 @@ formatter = logging.Formatter("%(name)s %(levelname)s: %(message)s")
 handler.setFormatter(formatter)
 root_log.addHandler(handler)
 
-netbox = NetBox(host=config.netbox_host, use_ssl=True, auth_token=config.netbox_token)
+netbox = NetBox(host=config.netbox_host, use_ssl=True, ssl_verify=True, auth_token=config.netbox_token)
 platforms = netbox.dcim.get_platforms()
 devices = netbox.dcim.get_devices(tag='network-riverbed')
  
