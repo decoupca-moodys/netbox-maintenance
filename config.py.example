@@ -1,0 +1,2 @@
+netbox_host = 'netbox.example.net'
+netbox_token = 'read/write token'
