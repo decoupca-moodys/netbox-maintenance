@@ -7,44 +7,49 @@ from pprint import pprint
 import re
 
 
-HOSTNAME_PATTERN = r"^(?P<role>\w{1})(?P<site>\w{3})(?P<floor>\d{2})(?P<subrole>\w{2})(?P<index>\d{2})$"
+HOSTNAME_PATTERN = r"^(?P<role>\w{1})(?P<site>\w{3})(?P<floor>\d{2})(?P<subrole>\w{2})(?P<index>\d{2}).*$"
 
-DEVICE_TAGS = {
-    "switch-access": "Switch - Access",
-    "switch-distribution": "Switch - Distribution",
-    "primary": "Primary",
-    "secondary": "Secondary",
-    "layer2": "Layer 2",
-    "layer3": "Layer 3",
-    "edge-router": "Edge Router",
-}
+DEVICE_TAGS = [
+    "core-router",
+    "edge-router",
+    "edge-router",
+    "layer2",
+    "layer3",
+    "load-balancer",
+    "primary",
+    "secondary",
+    "switch-access",
+    "switch-distribution",
+    "voice-gateway",
+    "wan-accelerator",
+]
 
 HOSTNAME_ROLE_TAG_MAP = {
+    "O": "wan-accelerator",
     "R": "router",
     "S": "switch",
-    "W": "wireless-controller",
     "V": "voice-gateway",
-    "O": "wan-accelerator",
+    "W": "wireless-controller",
 }
 
 HOSTNAME_SUBROLE_TAG_MAP = {
     "AC": "switch-access",
-    "DS": "switch-distribution",
-    "SS": "switch-server",
-    "VG": "voice-gateway",
-    "WC": "wireless-controller",
-    "TS": "console-server",
-    "LB": "load-balancer",
-    "WA": "wan-router",  # Legacy
-    "ER": "edge-router",  # New, Fulcrum
     "CR": "core-router",
+    "DS": "switch-distribution",
+    "ER": "edge-router",  # New, Fulcrum
+    "LB": "load-balancer",
+    "SS": "switch-server",
+    "TS": "console-server",
+    "VG": "voice-gateway",
+    "WA": "wan-router",  # Legacy
+    "WC": "wireless-controller",
     "WO": "wan-accelerator",
 }
 
 PLATFORM_TAG_MAP = {
     "Network-Arista": "eos",
     "Network-IOS": "ios",
-    "Network-IOS-XE": "ios_xe",
+    "Network-IOS-XE": "ios",
     "Network-Juniper": "junos",
     "Network-NXOS": "nxos",
     "Network-Riverbed": "riverbed",
@@ -69,8 +74,8 @@ netbox_args = {
 
 netbox = NetBox(**netbox_args)
 platforms = netbox.dcim.get_platforms()
-devices = netbox.dcim.get_devices(has_primary_ip=True, site="WTC")
-
+devices = netbox.dcim.get_devices(has_primary_ip=True, site="MAD")
+#ipdb.set_trace()
 
 def get_platform_id(platform_slug):
     for platform in platforms:
@@ -101,10 +106,12 @@ def verify_platform(device):
             )
 
 
-def verify_all_platforms(devices):
+def map_threads(worker, devices):
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
-        return executor.map(verify_platform, devices)
+        return executor.map(worker, devices)
 
+def verify_all_platforms(devices):
+    return map_threads(verify_platforms, devices)
 
 def parse_hostname(device):
     """Parses a hostname into properties dict"""
@@ -135,30 +142,16 @@ def parse_hostname(device):
     return device
 
 
-def verify_tags_created(netbox):
-    existing_tags = netbox.extras.get_tags()
-    for desired_tag in DEVICE_TAGS.items():
-        tag_args = {"slug": desired_tag.key, "name": desired_tag.value}
-        for existing_tag in existing_tags:
-            if existing_tag["slug"] == desired_tag.key:
-                tag_exists = True
-        if tag_exists:
-            log.info(f'Tag {desired_tag["name"]} exists, updating.')
-            update = {"slug": desired_tag["slug"]}
-            netbox.extras.update_tag(**tag_args)
-        else:
-            log.info(f'Creating tag: {desired_tag["name"]}')
-            netbox.extras.create_tag(**tag_args)
 
-
-def update_device_tags(device):
+def get_device_tags(device):
+    """ Returns a list of all tags a device should have based on hostname """
     device_tags = []
     device = parse_hostname(device)
 
     # Parsed tags
     if device["parsed_props"]:
         for prop in device["parsed_props"].values():
-            if prop in DEVICE_TAGS.keys():
+            if prop in DEVICE_TAGS:
                 device_tags.append(prop)
 
     # Primary & secondary distribution switches
@@ -168,6 +161,21 @@ def update_device_tags(device):
         if device["parsed_props"]["device_index"] == 2:
             device_tags.append("secondary")
 
+    # 3850s often serve dual purposes as access stacks
+    if "core-router" in device_tags:
+        if '3850' in device['device_type']['model'] or '3750' in device['device_type']['model']:
+            device_tags.append("switch-access")
+    
+    # Sometimes a device's role and subrole will duplicate tags.
+    # Casting as set removes duplicates.
+    return list(set(device_tags))
+
+
+def update_device_tags(device):
+    """ Updates a device with tags it should have based on hostname """
+    device_tags = get_device_tags(device)
+    log.debug(f'{device["name"]}: Tags has: {device["tags"]}')
+    log.debug(f'{device["name"]}: Tags should have: {device_tags}')
     if device_tags:
         update_tags = []
         for tag in device_tags:
@@ -181,19 +189,12 @@ def update_device_tags(device):
             }
         )
 
-
-def verify_all_tags(device):
-    pass
+def update_all_device_tags(devices):
+    return map_threads(update_device_tags, devices)
 
 
 def main():
-    for device in devices:
-        # device = parse_hostname(device)
-
-        # print(device['name'])
-        # pprint(device['parsed_props'])
-        update_device_tags(device)
-
+    update_all_device_tags(devices)
 
 if __name__ == "__main__":
     main()
