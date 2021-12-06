@@ -9,24 +9,27 @@ import re
 
 HOSTNAME_PATTERN=r'^(?P<role>\w{1})(?P<site>\w{3})(?P<floor>\d{2})(?P<subrole>\w{2})(?P<index>\d{2})$'
 
-DEVICE_TAGS = [
-    {'name': 'Switch - Access', 'slug': 'switch-access'},
-    {'name': 'Switch - Distribution', 'slug': 'switch-distribution'},
-    {'name': 'Primary', 'slug': 'primary'},
-    {'name': 'Secondary', 'slug': 'secondary'},
-    {'name': 'Layer 3', 'slug': 'l3'},
-    {'name': 'Layer 2', 'slug': 'l2'},
-]
+DEVICE_TAGS = {
+    'switch-access': 'Switch - Access',
+    'switch-distribution': 'Switch - Distribution',
+    'primary': 'Primary',
+    'secondary': 'Secondary',
+    'layer2': 'Layer 2',
+    'layer3': 'Layer 3',
+    'edge-router': 'Edge Router',
+}
 
 HOSTNAME_ROLE_TAG_MAP = {
     'R': 'router',
     'S': 'switch',
     'W': 'wireless-controller',
+    'V': 'voice-gateway',
+    'O': 'wan-accelerator',
 }
 
 HOSTNAME_SUBROLE_TAG_MAP = {
     'AC': 'switch-access',
-    'DC': 'switch-distribution',
+    'DS': 'switch-distribution',
     'SS': 'switch-server',
     'VG': 'voice-gateway',
     'WC': 'wireless-controller',
@@ -34,6 +37,8 @@ HOSTNAME_SUBROLE_TAG_MAP = {
     'LB': 'load-balancer',
     'WA': 'wan-router', # Legacy
     'ER': 'edge-router', # New, Fulcrum
+    'CR': 'core-router',
+    'WO': 'wan-accelerator',
 }
 
 PLATFORM_TAG_MAP = {
@@ -123,18 +128,59 @@ def parse_hostname(device):
     return device
     
 
-def verify_tags(device):
-    pass
+def verify_tags_created(netbox):
+    existing_tags = netbox.extras.get_tags()
+    for desired_tag in DEVICE_TAGS.items():
+        tag_args = {'slug': desired_tag.key, 'name': desired_tag.value}
+        for existing_tag in existing_tags:
+            if existing_tag['slug'] == desired_tag.key:
+                tag_exists = True
+        if tag_exists:
+            log.info(f'Tag {desired_tag["name"]} exists, updating.')
+            update = {'slug': desired_tag['slug']}
+            netbox.extras.update_tag(**tag_args)
+        else:
+            log.info(f'Creating tag: {desired_tag["name"]}')
+            netbox.extras.create_tag(**tag_args)
+        
+def update_device_tags(device):
+    device_tags = []
+    device = parse_hostname(device)
+
+    # Parsed tags
+    if device['parsed_props']:
+        for prop in device['parsed_props'].values():
+            if prop in DEVICE_TAGS.keys():
+                device_tags.append(prop)
+
+    # Primary & secondary distribution switches
+    if 'switch-distribution' in device_tags:
+        if device['parsed_props']['device_index'] == 1:
+            device_tags.append('primary')
+        if device['parsed_props']['device_index'] == 2:
+            device_tags.append('secondary')
+    
+    if device_tags:
+        update_tags = []
+        for tag in device_tags:
+            if tag not in device['tags']:
+                log.info(f'{device["name"]}: Adding tag "{tag}"')
+                update_tags.append(tag)
+        netbox.dcim.update_device(**{
+            'device_name': device['name'],
+            'tags': update_tags,
+        })
 
 def verify_all_tags(device):
     pass
 
 def main():
-    #verify_all_platforms(devices)
     for device in devices:
-        device = parse_hostname(device)
-        print(device['name'])
-        pprint(device['parsed_props'])
+        #device = parse_hostname(device)
+
+        #print(device['name'])
+        #pprint(device['parsed_props'])
+        update_device_tags(device)
 
 if __name__ == "__main__":
     main()
