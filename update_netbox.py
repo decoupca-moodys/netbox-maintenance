@@ -219,14 +219,14 @@ def tag_subroles(device):
                 tags_should_have.append(prop)
 
     # Primary & secondary distribution switches / core routers
-    if "distribution-switch" in tags_should_have or "core-router" in tags_should_have:
+    if device['parsed_props']['subrole'] == 'distribution-switch' or device['parsed_props']['subrole'] == 'core-router':
         if device["parsed_props"]["index"] == 1:
             tags_should_have.append("primary")
         if device["parsed_props"]["index"] == 2:
             tags_should_have.append("secondary")
 
     # 3750/3850s often serve dual purposes as access stacks
-    if "core-router" in tags_should_have:
+    if device['parsed_props']['role'] == 'router':
         if (
             "3850" in device["device_type"]["model"]
             or "3750" in device["device_type"]["model"]
@@ -237,7 +237,7 @@ def tag_subroles(device):
     # Casting as set removes duplicates.
     tags_should_have = list(set(tags_should_have))
     device.update({'tags_should_have': tags_should_have})
-    log.debug(f'{device["name"]}: Tags needed: {tags_should_have}')
+    log.debug(f'{device["name"]}: Tags should have: {tags_should_have}')
 
 
 def tag_all_subroles(devices):
@@ -262,7 +262,7 @@ def update_device_tags(device):
                 netbox.dcim.update_device(
                     **{
                         "device_name": device["name"],
-                        "tags": update_tags,
+                        "tags": tags_should_have,
                     }
                 )
     else:
