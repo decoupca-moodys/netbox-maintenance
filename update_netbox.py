@@ -103,10 +103,6 @@ netbox_args = {
 }
 
 netbox = NetBox(**netbox_args)
-platforms = netbox.dcim.get_platforms()
-devices = netbox.dcim.get_devices(has_primary_ip=True, site=args.site.upper())
-# ipdb.set_trace()
-
 
 def arg_list(string):
     return string.split(",")
@@ -152,42 +148,62 @@ def verify_all_platforms(devices):
 
 def parse_hostname(device):
     """Parses a hostname into properties dict"""
+    parsed_props = {
+        'role': None,
+        'site': None,
+        'floor': None,
+        'subrole': None,
+        'index': None,
+        'status': None,
+    }
     pattern = re.compile(HOSTNAME_PATTERN)
     parsed_hostname = pattern.search(device["name"])
     if parsed_hostname:
-        device_role = parsed_hostname.group("role")
-        device_site = parsed_hostname.group("site")
-        device_floor = parsed_hostname.group("floor")
-        device_subrole = parsed_hostname.group("subrole")
-        device_index = parsed_hostname.group("index")
-        device_status = parsed_hostname.group("status")
-
-        device.update(
-            {
-                "parsed_props": {
-                    "device_role": HOSTNAME_ROLE_MAP.get(device_role)
-                    or device_role,
-                    "device_site": device_site,
-                    "device_floor": int(device_floor),
-                    "device_subrole": HOSTNAME_SUBROLE_MAP.get(device_subrole)
-                    or device_subrole,
-                    "device_index": int(device_index),
-                    "device_status": HOSTNAME_STATUS_MAP.get(device_status) or device_status,
-                }
-            }
-        )
-    else:
-        device.update({"parsed_props": None})
+        role = parsed_hostname.group("role")
+        site = parsed_hostname.group("site")
+        floor = parsed_hostname.group("floor")
+        subrole = parsed_hostname.group("subrole")
+        index = parsed_hostname.group("index")
+        status = parsed_hostname.group("status")
+        parsed_props.update({
+            "role": HOSTNAME_ROLE_MAP.get(role) or role,
+            "site": site,
+            "floor": int(floor),
+            "subrole": HOSTNAME_SUBROLE_MAP.get(subrole) or subrole,
+            "index": int(index),
+            "status": HOSTNAME_STATUS_MAP.get(status) or status,
+        })
+    device.update({"parsed_props": parsed_props})
     return device
 
 
+def get_devices_with_subrole(devices, subrole):
+    return [x for x in devices if x['parsed_props']['subrole'] == subrole]
 
+def get_stp_root(devices):
+    """ Determines which devices of a given list should be STP root  """
+    result = {'primary': None, 'secondary': None}
+    distribution_switches = get_devices_with_subrole(devices, 'distribution-switch')
+    if distribution_switches:
+        for switch in distribution_switches:
+            if switch['parsed_props']['index'] == 1:
+                result['primary'] = switch
+            if switch['parsed_props']['index'] == 2:
+                result['secondary'] = switch
+    else:
+        core_routers = get_devices_with_subrole(devices, 'core-router')
+        for router in core_routers:
+            if router['parsed_props']['index'] == 1:
+                result['primary'] = router
+            if router['parsed_props']['index'] == 2:
+                result['secondary'] = router
+
+    return result
 
 
 def get_device_tags(device):
     """Returns a list of all tags a device should have based on hostname"""
     device_tags = []
-    device = parse_hostname(device)
 
     # Parsed tags
     if device["parsed_props"]:
@@ -195,11 +211,11 @@ def get_device_tags(device):
             if prop in NETBOX_TAGS:
                 device_tags.append(prop)
 
-    # Primary & secondary distribution switches
-    if "distribution-switch" in device_tags:
-        if device["parsed_props"]["device_index"] == 1:
+    # Primary & secondary distribution switches / core routers
+    if "distribution-switch" in device_tags or "core-router" in device_tags:
+        if device["parsed_props"]["index"] == 1:
             device_tags.append("primary")
-        if device["parsed_props"]["device_index"] == 2:
+        if device["parsed_props"]["index"] == 2:
             device_tags.append("secondary")
 
     # 3750/3850s often serve dual purposes as access stacks
@@ -239,15 +255,22 @@ def update_all_device_tags(devices):
 
 
 def main():
-    if args.dry_run:
-        for device in devices:
-            tags = get_device_tags(device)
-            if tags:
-                log.info(f'{device["name"]}: Parsed tags from hostname: {tags}')
-            else:
-                log.info(f'{device["name"]}: Found no tags in NETBOX_TAGS to apply')
-    else:
-        update_all_device_tags(devices)
+    platforms = netbox.dcim.get_platforms()
+    devices = netbox.dcim.get_devices(has_primary_ip=True, site=args.site.upper())
+    log.debug(f'Received {len(devices)} devices from NetBox')
+    # ipdb.set_trace()
+    devices = list(map(parse_hostname, devices))
+    log.debug(f'Parsed hostnames into properties')
+   #if args.dry_run:
+    #    for device in devices:
+    #        tags = get_device_tags(device)
+    #        if tags:
+    #            log.info(f'{device["name"]}: Parsed tags from hostname: {tags}')
+    #        else:
+    #            log.info(f'{device["name"]}: Found no tags in NETBOX_TAGS to apply')
+    #else:
+    #    update_all_device_tags(devices)
+    pprint(get_stp_root(devices))
 
 
 if __name__ == "__main__":
