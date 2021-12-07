@@ -40,7 +40,8 @@ HOSTNAME_PATTERN = r"^(?P<role>\w{1})(?P<site>\w{3})(?P<floor>\d{2})(?P<subrole>
 NETBOX_TAGS = [
     "access-switch",
     "core-router",
-    "distribution-switch" "edge-router",
+    "distribution-switch",
+    "edge-router",
     "primary",
     "secondary",
     "active",
@@ -103,7 +104,7 @@ netbox_args = {
 
 netbox = NetBox(**netbox_args)
 platforms = netbox.dcim.get_platforms()
-devices = netbox.dcim.get_devices(has_primary_ip=True, site=args.site)
+devices = netbox.dcim.get_devices(has_primary_ip=True, site=args.site.upper())
 # ipdb.set_trace()
 
 
@@ -180,6 +181,9 @@ def parse_hostname(device):
     return device
 
 
+
+
+
 def get_device_tags(device):
     """Returns a list of all tags a device should have based on hostname"""
     device_tags = []
@@ -192,7 +196,7 @@ def get_device_tags(device):
                 device_tags.append(prop)
 
     # Primary & secondary distribution switches
-    if "switch-distribution" in device_tags:
+    if "distribution-switch" in device_tags:
         if device["parsed_props"]["device_index"] == 1:
             device_tags.append("primary")
         if device["parsed_props"]["device_index"] == 2:
