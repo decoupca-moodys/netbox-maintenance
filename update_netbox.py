@@ -44,6 +44,7 @@ NETBOX_TAGS = [
     "edge-router",
     "primary",
     "secondary",
+    "server-switch",
     "active",
     "standby",
 ]
