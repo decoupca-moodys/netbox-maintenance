@@ -20,16 +20,29 @@ parser.add_argument(
     "-r",
     help="Region ID to query devices from",
     type=str,
+)
 parser.add_argument(
-    "--tags",
+    "--tag",
     "-t",
-    help="Update device tags based on parsed hostname",
-    action="store_true",
+    help="Retrieve hosts with tag",
+    type=str,
 )
 parser.add_argument(
     "--list",
-    "-l"
+    "-l",
     help="List hostnames that match query, do nothing",
+    action="store_true",
+)
+parser.add_argument(
+    "--active",
+    "-a",
+    help="Fetch devices with 'active' status only",
+    action="store_true",
+)
+parser.add_argument(
+    "--update-tags",
+    "-u",
+    help="Update device tags based on properties found in hostname",
     action="store_true",
 )
 parser.add_argument(
@@ -101,7 +114,7 @@ PLATFORM_TAG_MAP = {
 
 root_log = logging.getLogger()
 log = logging.getLogger("update_netbox")
-log.setLevel(logging.INFO)
+log.setLevel(logging.DEBUG)
 handler = logging.StreamHandler()
 formatter = logging.Formatter("%(name)s %(levelname)s: %(message)s")
 handler.setFormatter(formatter)
@@ -266,19 +279,21 @@ def update_device_tags(device):
     if tags_should_have:
         log.debug(f'{device["name"]}: Tags should have: {tags_should_have}')
         tags_has = device['tags']
-        if tags_has:
-            log.debug(f'{device["name"]}: Has tags: {tags_has}')
+        tags_has.sort()
+        tags_should_have.sort()
+        if tags_should_have != tags_has:
             update_tags = [x for x in tags_should_have if x not in tags_has]
-            if update_tags:
-                log.info(f'{device["name"]}: Adding tag(s): {update_tags}')
-                netbox.dcim.update_device(
-                    **{
-                        "device_name": device["name"],
-                        "tags": tags_should_have,
-                    }
-                )
+            log.info(f'{device["name"]}: Adding tag(s): {update_tags}')
+            netbox.dcim.update_device(
+                **{
+                    "device_name": device["name"],
+                    "tags": tags_should_have,
+                }
+            )
+        else:
+            log.debug(f'{device["name"]}: Already has all tags it should, nothing to update')
     else:
-        log.debug(f'{device["name"]}: No tags needed')
+        log.debug(f'{device["name"]}: Should not have any tags, nothing to update')
 
 
 def apply_all_device_tags(devices):
@@ -295,31 +310,45 @@ def update_all_device_tags(devices):
     map_threads(update_device_tags, devices)
 
 def main():
+    devices = []
     platforms = netbox.dcim.get_platforms()
     query_args = {'has_primary_ip': True}
+    if args.active:
+        query_args.update({'status': 'active'})
+    if args.tag:
+        query_args.update({'tag': args.tag})
     if args.site:
         query_args.update({'site': args.site.upper()})
+        devices.extend(netbox.dcim.get_devices(**query_args))
     if args.region:
-        query_args.update({'region': args.region.upper()})
-    devices = netbox.dcim.get_devices(**query_args)
+        log.debug(f'Fetching sites for region "{args.region}"')
+        sites = netbox.dcim.get_sites(region=args.region.lower())
+        for site in sites:
+            log.debug(f'Fetching devices for site "{site["name"]}"')
+            query_args.update({'site': site['slug']})
+            devices.extend(netbox.dcim.get_devices(**query_args))
+            #ipdb.set_trace()
+
     log.debug(f'Received {len(devices)} devices from NetBox')
     if args.list:
+        #pprint(devices[0])
         for device in devices:
             print(device['name'])
-    # ipdb.set_trace()
-    #devices = list(map(parse_hostname, devices))
-    #log.debug(f'Parsed hostnames into properties')
-    #if args.dry_run:
-    #    for device in devices:
-    #        tags = get_device_tags(device)
-    #        if tags:
-    #            log.info(f'{device["name"]}: Parsed tags from hostname: {tags}')
-    #        else:
-    #            log.info(f'{device["name"]}: Found no tags in NETBOX_TAGS to apply')
-    #else:
-    #    update_all_device_tags(devices)
-    #update_all_device_tags(devices)
-    #pprint(devices[0])
+    if args.update_tags:
+        devices = list(map(parse_hostname, devices))
+        apply_all_device_tags(devices)
+        log.debug(f'Parsed hostnames into properties')
+        if args.dry_run:
+            for device in devices:
+                if device["tags_should_have"]:
+                    log.info(f'{device["name"]}: Should have tags: {device["tags_should_have"]}')
+                    log.info(f'{device["name"]}: Has tags: {device["tags"]}')
+                else:
+                    log.info(f'{device["name"]}: Found no tags to apply')
+        else:
+            update_all_device_tags(devices)
+            #for device in devices:
+            #    update_device_tags(device)
 
 if __name__ == "__main__":
     main()
