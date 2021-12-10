@@ -129,6 +129,7 @@ netbox_args = {
 
 netbox = NetBox(**netbox_args)
 
+
 def arg_list(string):
     return string.split(",")
 
@@ -174,12 +175,12 @@ def verify_all_platforms(devices):
 def parse_hostname(device):
     """Parses a hostname into properties dict"""
     parsed_props = {
-        'role': None,
-        'site': None,
-        'floor': None,
-        'subrole': None,
-        'index': None,
-        'status': None,
+        "role": None,
+        "site": None,
+        "floor": None,
+        "subrole": None,
+        "index": None,
+        "status": None,
     }
     pattern = re.compile(HOSTNAME_PATTERN)
     parsed_hostname = pattern.search(device["name"])
@@ -190,52 +191,55 @@ def parse_hostname(device):
         subrole = parsed_hostname.group("subrole")
         index = parsed_hostname.group("index")
         status = parsed_hostname.group("status")
-        parsed_props.update({
-            "role": HOSTNAME_ROLE_MAP.get(role) or role,
-            "site": site,
-            "floor": int(floor),
-            "subrole": HOSTNAME_SUBROLE_MAP.get(subrole) or subrole,
-            "index": int(index),
-            "status": HOSTNAME_STATUS_MAP.get(status) or status,
-        })
-    device.update({"parsed_props": parsed_props, 'tags_should_have': []})
+        parsed_props.update(
+            {
+                "role": HOSTNAME_ROLE_MAP.get(role) or role,
+                "site": site,
+                "floor": int(floor),
+                "subrole": HOSTNAME_SUBROLE_MAP.get(subrole) or subrole,
+                "index": int(index),
+                "status": HOSTNAME_STATUS_MAP.get(status) or status,
+            }
+        )
+    device.update({"parsed_props": parsed_props, "tags_should_have": []})
     return device
 
 
 def get_devices_with_subrole(devices, subrole):
-    return [x for x in devices if x['parsed_props']['subrole'] == subrole]
+    return [x for x in devices if x["parsed_props"]["subrole"] == subrole]
+
 
 def tag_stp_root_bridges(devices):
-    """ Determines which devices of a given list should be STP root  """
-    result = {'primary': None, 'secondary': None}
-    distribution_switches = get_devices_with_subrole(devices, 'distribution-switch')
+    """Determines which devices of a given list should be STP root"""
+    result = {"primary": None, "secondary": None}
+    distribution_switches = get_devices_with_subrole(devices, "distribution-switch")
     if distribution_switches:
         for device in distribution_switches:
-            if device['parsed_props']['index'] == 1:
-                device['tags_should_have'].append('stp-root-primary')
-                result['primary'] = device
-            if device['parsed_props']['index'] == 2:
-                device['tags_should_have'].append('stp-root-secondary')
-                result['secondary'] = device
+            if device["parsed_props"]["index"] == 1:
+                device["tags_should_have"].append("stp-root-primary")
+                result["primary"] = device
+            if device["parsed_props"]["index"] == 2:
+                device["tags_should_have"].append("stp-root-secondary")
+                result["secondary"] = device
     else:
-        core_routers = get_devices_with_subrole(devices, 'core-router')
+        core_routers = get_devices_with_subrole(devices, "core-router")
         for device in core_routers:
-            if device['parsed_props']['index'] == 1:
-                device['tags_should_have'].append('stp-root-primary')
-                result['primary'] = device
-            if device['parsed_props']['index'] == 2:
-                device['tags_should_have'].append('stp-root-secondary')
-                result['secondary'] = device
-    if result['primary']:
+            if device["parsed_props"]["index"] == 1:
+                device["tags_should_have"].append("stp-root-primary")
+                result["primary"] = device
+            if device["parsed_props"]["index"] == 2:
+                device["tags_should_have"].append("stp-root-secondary")
+                result["secondary"] = device
+    if result["primary"]:
         log.debug(f'{result["primary"]["name"]}: tagged "stp-root-primary"')
-    if result['secondary']:
+    if result["secondary"]:
         log.debug(f'{result["secondary"]["name"]}: tagged "stp-root-secondary"')
     return result
 
 
 def tag_subroles(device):
     """Returns a list of all tags a device should have based on hostname"""
-    tags_should_have = device.get('tags_should_have')
+    tags_should_have = device.get("tags_should_have")
 
     # Parsed tags
     if device["parsed_props"]:
@@ -244,14 +248,17 @@ def tag_subroles(device):
                 tags_should_have.append(prop)
 
     # Primary & secondary distribution switches / core routers
-    if device['parsed_props']['subrole'] == 'distribution-switch' or device['parsed_props']['subrole'] == 'core-router':
+    if (
+        device["parsed_props"]["subrole"] == "distribution-switch"
+        or device["parsed_props"]["subrole"] == "core-router"
+    ):
         if device["parsed_props"]["index"] == 1:
             tags_should_have.append("primary")
         if device["parsed_props"]["index"] == 2:
             tags_should_have.append("secondary")
 
     # 3750/3850s often serve dual purposes as access stacks
-    if device['parsed_props']['subrole'] == 'edge-router':
+    if device["parsed_props"]["subrole"] == "edge-router":
         if (
             "3850" in device["device_type"]["model"]
             or "3750" in device["device_type"]["model"]
@@ -261,7 +268,7 @@ def tag_subroles(device):
     # Sometimes a device's role and subrole will duplicate tags.
     # Casting as set removes duplicates.
     tags_should_have = list(set(tags_should_have))
-    device.update({'tags_should_have': tags_should_have})
+    device.update({"tags_should_have": tags_should_have})
     log.debug(f'{device["name"]}: Tags should have: {tags_should_have}')
 
 
@@ -271,14 +278,14 @@ def tag_all_subroles(devices):
 
 
 def update_device_tags(device):
-    """Updates a device with tags it should have """
-    #log.debug(f'{device["name"]}: {device["tags_should_have"]}')
-    #log.debug(f'{device["name"]}: Updating tags')
-    tags_should_have = device.get('tags_should_have')
-    #log.debug(f'{device["name"]}: Updating tags')
+    """Updates a device with tags it should have"""
+    # log.debug(f'{device["name"]}: {device["tags_should_have"]}')
+    # log.debug(f'{device["name"]}: Updating tags')
+    tags_should_have = device.get("tags_should_have")
+    # log.debug(f'{device["name"]}: Updating tags')
     if tags_should_have:
         log.debug(f'{device["name"]}: Tags should have: {tags_should_have}')
-        tags_has = device['tags']
+        tags_has = device["tags"]
         tags_has.sort()
         tags_should_have.sort()
         if tags_should_have != tags_has:
@@ -291,7 +298,9 @@ def update_device_tags(device):
                 }
             )
         else:
-            log.debug(f'{device["name"]}: Already has all tags it should, nothing to update')
+            log.debug(
+                f'{device["name"]}: Already has all tags it should, nothing to update'
+            )
     else:
         log.debug(f'{device["name"]}: Should not have any tags, nothing to update')
 
@@ -300,55 +309,61 @@ def apply_all_device_tags(devices):
     tag_stp_root_bridges(devices)
     tag_all_subroles(devices)
 
+
 def show_all_device_tags_should_have(devices):
     apply_all_device_tags(devices)
     for device in devices:
         log.info(f'{device["name"]:} Tags needed: {device["tags_should_have"]}')
 
+
 def update_all_device_tags(devices):
     apply_all_device_tags(devices)
     map_threads(update_device_tags, devices)
 
+
 def main():
     devices = []
     platforms = netbox.dcim.get_platforms()
-    query_args = {'has_primary_ip': True}
+    query_args = {"has_primary_ip": True}
     if args.active:
-        query_args.update({'status': 'active'})
+        query_args.update({"status": "active"})
     if args.tag:
-        query_args.update({'tag': args.tag})
+        query_args.update({"tag": args.tag})
     if args.site:
-        query_args.update({'site': args.site.upper()})
+        query_args.update({"site": args.site.upper()})
         devices.extend(netbox.dcim.get_devices(**query_args))
     if args.region:
         log.debug(f'Fetching sites for region "{args.region}"')
         sites = netbox.dcim.get_sites(region=args.region.lower())
         for site in sites:
             log.debug(f'Fetching devices for site "{site["name"]}"')
-            query_args.update({'site': site['slug']})
+            query_args.update({"site": site["slug"]})
             devices.extend(netbox.dcim.get_devices(**query_args))
-            #ipdb.set_trace()
+            # ipdb.set_trace()
 
-    log.debug(f'Received {len(devices)} devices from NetBox')
+    log.debug(f"Received {len(devices)} devices from NetBox")
     if args.list:
-        #pprint(devices[0])
+        # pprint(devices[0])
         for device in devices:
-            print(device['name'])
+            print(device["name"])
     if args.update_tags:
         devices = list(map(parse_hostname, devices))
         apply_all_device_tags(devices)
-        log.debug(f'Parsed hostnames into properties')
+        log.debug(f"Parsed hostnames into properties")
         if args.dry_run:
             for device in devices:
                 if device["tags_should_have"]:
-                    log.info(f'{device["name"]}: Should have tags: {device["tags_should_have"]}')
+                    log.info(
+                        f'{device["name"]}: Should have tags: {device["tags_should_have"]}'
+                    )
                     log.info(f'{device["name"]}: Has tags: {device["tags"]}')
                 else:
                     log.info(f'{device["name"]}: Found no tags to apply')
         else:
             update_all_device_tags(devices)
-            #for device in devices:
+            # for device in devices:
             #    update_device_tags(device)
+
 
 if __name__ == "__main__":
     main()
