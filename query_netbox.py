@@ -251,7 +251,7 @@ def tag_subroles(device):
             tags_should_have.append("secondary")
 
     # 3750/3850s often serve dual purposes as access stacks
-    if device['parsed_props']['role'] == 'router':
+    if device['parsed_props']['subrole'] == 'edge-router':
         if (
             "3850" in device["device_type"]["model"]
             or "3750" in device["device_type"]["model"]
