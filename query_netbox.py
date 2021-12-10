@@ -16,9 +16,20 @@ parser.add_argument(
     type=str,
 )
 parser.add_argument(
+    "--region",
+    "-r",
+    help="Region ID to query devices from",
+    type=str,
+parser.add_argument(
     "--tags",
     "-t",
     help="Update device tags based on parsed hostname",
+    action="store_true",
+)
+parser.add_argument(
+    "--list",
+    "-l"
+    help="List hostnames that match query, do nothing",
     action="store_true",
 )
 parser.add_argument(
@@ -285,12 +296,20 @@ def update_all_device_tags(devices):
 
 def main():
     platforms = netbox.dcim.get_platforms()
-    devices = netbox.dcim.get_devices(has_primary_ip=True, site=args.site.upper())
+    query_args = {'has_primary_ip': True}
+    if args.site:
+        query_args.update({'site': args.site.upper()})
+    if args.region:
+        query_args.update({'region': args.region.upper()})
+    devices = netbox.dcim.get_devices(**query_args)
     log.debug(f'Received {len(devices)} devices from NetBox')
+    if args.list:
+        for device in devices:
+            print(device['name'])
     # ipdb.set_trace()
-    devices = list(map(parse_hostname, devices))
-    log.debug(f'Parsed hostnames into properties')
-   #if args.dry_run:
+    #devices = list(map(parse_hostname, devices))
+    #log.debug(f'Parsed hostnames into properties')
+    #if args.dry_run:
     #    for device in devices:
     #        tags = get_device_tags(device)
     #        if tags:
@@ -299,7 +318,7 @@ def main():
     #            log.info(f'{device["name"]}: Found no tags in NETBOX_TAGS to apply')
     #else:
     #    update_all_device_tags(devices)
-    update_all_device_tags(devices)
+    #update_all_device_tags(devices)
     #pprint(devices[0])
 
 if __name__ == "__main__":
