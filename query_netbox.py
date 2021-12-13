@@ -85,12 +85,14 @@ HOSTNAME_SUBROLE_MAP = {
     "AC": "access-switch",
     "CR": "core-router",
     "DS": "distribution-switch",
-    "ER": "edge-router",  # New, Fulcrum
+    "ED": "edge-switch", # Internet-facing edge switch
+    "ER": "edge-router", # New, Fulcrum
     "LB": "load-balancer",
+    "MA": "man-router", # MAN router
     "SS": "server-switch",
     "TS": "console-server",
     "VG": "voice-gateway",
-    "WA": "wan-router",  # Legacy
+    "WA": "wan-router", # Legacy
     "WC": "wireless-controller",
     "WO": "wan-accelerator",
 }
