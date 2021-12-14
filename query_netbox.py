@@ -323,28 +323,42 @@ def tag_subroles(device):
 
 
 def tag_all_subroles(devices):
-    for device in devices:
-        tag_subroles(device)
+    parallelize(tag_subroles, devices)
 
+def tag_site_device_subroles(site_result):
+    pprint(site_result.items())
+    site_slug, devices = site_result.items()
+    if devices:
+        log.debug(f'{site_slug}: Tagging device subroles')
+        tag_all_subroles(devices)
+
+def tag_all_site_device_subroles(site_results):
+    log.debug(f'Tagging all site results')
+    parallelize(tag_site_device_subroles, site_results)
+
+def has_all_parsed_tags(device):
+    has_all_parsed_tags = True
+    for tag in device['tags_should_have']:
+        if tag not in device['tags']:
+            has_all_parsed_tags = False
+    return has_all_parsed_tags
 
 def update_device_tags(device):
-    """Updates a device with tags it should have"""
-    # log.debug(f'{device["name"]}: {device["tags_should_have"]}')
-    # log.debug(f'{device["name"]}: Updating tags')
+    """Updates a device with tags it should have.
+       Leaves existing tags in place.
+    """
     tags_should_have = device.get("tags_should_have")
-    # log.debug(f'{device["name"]}: Updating tags')
     if tags_should_have:
-        log.debug(f'{device["name"]}: Tags should have: {tags_should_have}')
+        log.debug(f'{device["name"]}: Tags should have based on hostname or config: {tags_should_have}')
         tags_has = device["tags"]
-        tags_has.sort()
-        tags_should_have.sort()
-        if tags_should_have != tags_has:
-            update_tags = [x for x in tags_should_have if x not in tags_has]
-            log.info(f'{device["name"]}: Adding tag(s): {update_tags}')
+        if not has_all_parsed_tags(device):
+            adding_tags = [x for x in tags_should_have if x not in tags_has]
+            update_tags = tags_has + adding_tags
+            log.info(f'{device["name"]}: Adding tag(s): {adding_tags}')
             netbox.dcim.update_device(
                 **{
                     "device_name": device["name"],
-                    "tags": tags_should_have,
+                    "tags": update_tags,
                 }
             )
         else:
@@ -376,51 +390,64 @@ def get_devices_from_site(site):
     log.debug(f'Getting devices from site {site["name"]}')
     site_args = copy.deepcopy(query_args)
     site_args.update({"site": site["slug"]})
-    return netbox.dcim.get_devices(**site_args)
+    devices = netbox.dcim.get_devices(**site_args)
+    return {site["slug"]: devices}
 
 def get_devices_from_sites(sites):
-    devices = parallelize(get_devices_from_site, sites)
-    return [x for x in devices if x]
+    return parallelize(get_devices_from_site, sites)
 
 def get_sites_from_region(region):
     log.debug(f'Getting sites for region "{region}"')
     return netbox.dcim.get_sites(region=region.lower())
 
 def get_devices_from_region(region):
-    devices = []
     log.debug(f'Getting devices for region "{region}"')
     sites = get_sites_from_region(region)
-    site_device_groups = get_devices_from_sites(sites)
-    for site_devices in site_device_groups:
-        devices.extend(site_devices)
-    return devices
+    return get_devices_from_sites(sites)
+
+def get_tags_needed(device):
+    tags_has = device['tags']
+    tags_needed = device['tags_should_have']
+    return [x for x in tags_should_have if x not in tags_has]
+
+def tags_to_string(tags):
+    output = ''
+    for tag in tags:
+        output += f'"{tag}", '
+    return output[:-2]
 
 def main():
     #platforms = netbox.dcim.get_platforms()
-    
+    result_list = [] 
     if args.site:
         site = get_site(args.site)
-        devices = get_devices_from_site(site[0])
+        site_results = [get_devices_from_site(site[0])]
     if args.region:
-        devices = get_devices_from_region(args.region)
-    log.debug(f'Got {len(devices)} from NetBox')
-    if args.list:
-        # pprint(devices[0])
-        for device in devices:
-            print(device["name"])
+        site_results = get_devices_from_region(args.region)
+    for site_result in site_results:
+        for site_slug, devices in site_result.items():
+            if args.list:
+                for device in devices:
+                    print(device['name'])
+            devices = list(map(parse_hostname, devices))
+            # Must be done per site
+            tag_stp_root_bridges(devices)
+        result_list.append({site_slug: devices})
+    tag_all_site_device_subroles(result_list)
     if args.update_tags:
-        devices = list(map(parse_hostname, devices))
-        apply_all_device_tags(devices)
-        log.debug(f"Parsed hostnames into properties")
         if args.dry_run:
             for device in devices:
-                if device["tags_should_have"]:
-                    log.info(
-                        f'{device["name"]}: Should have tags: {device["tags_should_have"]}'
-                    )
-                    log.info(f'{device["name"]}: Has tags: {device["tags"]}')
+                if device['tags_should_have']:
+                    if has_all_parsed_tags(device):
+                        log.info(f'{device["name"]}: No tags to update - already has all parsed tags')
+                        log.info(f'{device["name"]}: Has tags: {tags_to_string(device["tags"])}')
+                        log.info(f'{device["name"]}: Parsed tags: {tags_to_string(device["tags_should_have"])}')
+
+                    else:
+                        tags_needed = get_tags_needed(device)
+                        log.info(f'{device["name"]}: Needs tags: {tags_to_string(tags_needed)}')
                 else:
-                    log.info(f'{device["name"]}: Found no tags to apply')
+                    log.info(f'{device["name"]}: No tags to update - found no parsed tags to apply')
         else:
             update_all_device_tags(devices)
             # for device in devices:
