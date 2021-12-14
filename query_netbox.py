@@ -1,12 +1,23 @@
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 from netbox import NetBox
+from netmiko import ConnectHandler
 import config
 import logging
 import ipdb
 from pprint import pprint
 import re
+import copy
 
+netmiko_args = {
+    "ip": None,
+    "username": config.network_username,
+    "password": config.network_password,
+    "ssh_config_file": "~/.ssh/config",
+    "device_type": "cisco_ios",
+    "conn_timeout": 30,
+    "global_delay_factor": 10,
+}
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -85,14 +96,14 @@ HOSTNAME_SUBROLE_MAP = {
     "AC": "access-switch",
     "CR": "core-router",
     "DS": "distribution-switch",
-    "ED": "edge-switch", # Internet-facing edge switch
-    "ER": "edge-router", # New, Fulcrum
+    "ED": "edge-switch",  # Internet-facing edge switch
+    "ER": "edge-router",  # New, Fulcrum
     "LB": "load-balancer",
-    "MA": "man-router", # MAN router
+    "MA": "man-router",  # MAN router
     "SS": "server-switch",
     "TS": "console-server",
     "VG": "voice-gateway",
-    "WA": "wan-router", # Legacy
+    "WA": "wan-router",  # Legacy
     "WC": "wireless-controller",
     "WO": "wan-accelerator",
 }
@@ -174,6 +185,32 @@ def verify_all_platforms(devices):
     return map_threads(verify_platforms, devices)
 
 
+def is_ios_wlc(device):
+    """Determines if an IOS device is also serving as a WLC"""
+    wlc_config = "wireless mobility controller"
+    if device["platform"]["slug"] != "ios":
+        log.debug(f'{device["name"]}: is_ios_wlc: device["platform"]["slug"] != "ios"')
+        return False
+    else:
+        args = copy.deepcopy(netmiko_args)
+        args.update({"ip": device["primary_ip4"]["address"].split("/")[0]})
+        log.debug(f'{device["name"]}: is_ios_wlc: connecting to device...')
+        with ConnectHandler(**args) as conn:
+            log.debug(f'{device["name"]}: is_ios_wlc: checking config for wlc_config...')
+            cmd = f"show running-config | include wireless"
+            output = conn.send_command(cmd)
+            if wlc_config in output:
+                log.debug(
+                    f'{device["name"]}: is_ios_wlc: wlc_config found in running-config'
+                )
+                return True
+            else:
+                log.debug(
+                    f'{device["name"]}: is_ios_wlc: wlc_config not found in running-config'
+                )
+                return False
+
+
 def parse_hostname(device):
     """Parses a hostname into properties dict"""
     parsed_props = {
@@ -242,6 +279,11 @@ def tag_stp_root_bridges(devices):
 def tag_subroles(device):
     """Returns a list of all tags a device should have based on hostname"""
     tags_should_have = device.get("tags_should_have")
+
+    # Find core routers that also serve as WLCs
+    if device["parsed_props"]["subrole"] == "core-router":
+        if is_ios_wlc(device):
+            tags_should_have.append("wireless-controller")
 
     # Parsed tags
     if device["parsed_props"]:
