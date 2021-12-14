@@ -45,9 +45,8 @@ parser.add_argument(
     action="store_true",
 )
 parser.add_argument(
-    "--active",
-    "-a",
-    help="Fetch devices with 'active' status only",
+    "--include_inactive",
+    help="Include inactive records with results",
     action="store_true",
 )
 parser.add_argument(
@@ -65,9 +64,9 @@ parser.add_argument(
 )
 
 args = parser.parse_args()
-query_args = {"has_primary_ip": True}
-if args.active:
-    query_args.update({"status": "active"})
+query_args = {"has_primary_ip": True, "status": "active"}
+if args.include_inactive:
+    del query_args['status']
 if args.tag:
     query_args.update({"tag": args.tag})
 
@@ -380,25 +379,31 @@ def get_devices_from_site(site):
     return netbox.dcim.get_devices(**site_args)
 
 def get_devices_from_sites(sites):
-    return parallelize(get_devices_from_site, sites)
+    devices = parallelize(get_devices_from_site, sites)
+    return [x for x in devices if x]
 
 def get_sites_from_region(region):
     log.debug(f'Getting sites for region "{region}"')
     return netbox.dcim.get_sites(region=region.lower())
 
 def get_devices_from_region(region):
+    devices = []
     log.debug(f'Getting devices for region "{region}"')
     sites = get_sites_from_region(region)
-    return get_devices_from_sites(sites)
+    site_device_groups = get_devices_from_sites(sites)
+    for site_devices in site_device_groups:
+        devices.extend(site_devices)
+    return devices
 
 def main():
     #platforms = netbox.dcim.get_platforms()
+    
     if args.site:
         site = get_site(args.site)
         devices = get_devices_from_site(site[0])
     if args.region:
         devices = get_devices_from_region(args.region)
-    log.debug(f"Received {len(devices)} devices from NetBox")
+    log.debug(f'Got {len(devices)} from NetBox')
     if args.list:
         # pprint(devices[0])
         for device in devices:
