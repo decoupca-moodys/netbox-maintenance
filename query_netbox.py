@@ -63,7 +63,14 @@ parser.add_argument(
     dest="dry_run",
     action="store_true",
 )
+
 args = parser.parse_args()
+query_args = {"has_primary_ip": True}
+if args.active:
+    query_args.update({"status": "active"})
+if args.tag:
+    query_args.update({"tag": args.tag})
+
 
 
 HOSTNAME_PATTERN = r"^(?P<role>\w{1})(?P<site>\w{3})(?P<floor>\d{2})(?P<subrole>\w{2})(?P<index>\d{2})\-?(?P<status>ACT|STB|OLD)?.*$"
@@ -176,13 +183,13 @@ def verify_platform(device):
             )
 
 
-def map_threads(worker, devices):
+def parallelize(worker, devices):
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         return executor.map(worker, devices)
 
 
 def verify_all_platforms(devices):
-    return map_threads(verify_platforms, devices)
+    return parallelize(verify_platforms, devices)
 
 
 def is_ios_wlc(device):
@@ -313,7 +320,7 @@ def tag_subroles(device):
     # Casting as set removes duplicates.
     tags_should_have = list(set(tags_should_have))
     device.update({"tags_should_have": tags_should_have})
-    log.debug(f'{device["name"]}: Tags should have: {tags_should_have}')
+    #log.debug(f'{device["name"]}: Tags should have: {tags_should_have}')
 
 
 def tag_all_subroles(devices):
@@ -361,30 +368,36 @@ def show_all_device_tags_should_have(devices):
 
 
 def update_all_device_tags(devices):
-    apply_all_device_tags(devices)
-    map_threads(update_device_tags, devices)
+    parallelize(update_device_tags, devices)
 
+def get_site(site_name):
+    return netbox.dcim.get_sites(name=site_name.upper())
+
+def get_devices_from_site(site):
+    log.debug(f'Getting devices from site {site["name"]}')
+    site_args = copy.deepcopy(query_args)
+    site_args.update({"site": site["slug"]})
+    return netbox.dcim.get_devices(**site_args)
+
+def get_devices_from_sites(sites):
+    return parallelize(get_devices_from_site, sites)
+
+def get_sites_from_region(region):
+    log.debug(f'Getting sites for region "{region}"')
+    return netbox.dcim.get_sites(region=region.lower())
+
+def get_devices_from_region(region):
+    log.debug(f'Getting devices for region "{region}"')
+    sites = get_sites_from_region(region)
+    return get_devices_from_sites(sites)
 
 def main():
-    devices = []
-    platforms = netbox.dcim.get_platforms()
-    query_args = {"has_primary_ip": True}
-    if args.active:
-        query_args.update({"status": "active"})
-    if args.tag:
-        query_args.update({"tag": args.tag})
+    #platforms = netbox.dcim.get_platforms()
     if args.site:
-        query_args.update({"site": args.site.upper()})
-        devices.extend(netbox.dcim.get_devices(**query_args))
+        site = get_site(args.site)
+        devices = get_devices_from_site(site[0])
     if args.region:
-        log.debug(f'Fetching sites for region "{args.region}"')
-        sites = netbox.dcim.get_sites(region=args.region.lower())
-        for site in sites:
-            log.debug(f'Fetching devices for site "{site["name"]}"')
-            query_args.update({"site": site["slug"]})
-            devices.extend(netbox.dcim.get_devices(**query_args))
-            # ipdb.set_trace()
-
+        devices = get_devices_from_region(args.region)
     log.debug(f"Received {len(devices)} devices from NetBox")
     if args.list:
         # pprint(devices[0])
