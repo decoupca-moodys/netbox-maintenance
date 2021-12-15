@@ -101,6 +101,7 @@ HOSTNAME_ROLE_MAP = {
 HOSTNAME_SUBROLE_MAP = {
     "AC": "access-switch",
     "CR": "core-router",
+    "CE": "core-edge", # wtf?
     "DS": "distribution-switch",
     "ED": "edge-switch",  # Internet-facing edge switch
     "ER": "edge-router",  # New, Fulcrum
