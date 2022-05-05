@@ -1,3 +1,7 @@
 *.pyc
 *.swp
 config.py
+config.yaml
+__pycache__/
+.venv/
+*.code-workspace

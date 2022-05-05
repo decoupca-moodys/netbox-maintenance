@@ -1,0 +1,6 @@
+pynetbox
+tqdm
+scrapli
+scrapli[genie]
+scrapli[ttp]
+scrapli[textfsm]

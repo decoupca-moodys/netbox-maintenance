@@ -1,5 +1,0 @@
-netbox_host = 'netbox.example.net'
-netbox_token = 'read/write token'
-network_username = 'my-username'
-network_password = 'my-password'
-max_workers = 20
