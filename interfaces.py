@@ -3,7 +3,6 @@ from pprint import pprint
 
 import ipdb
 from megavolt import MegaVolt
-from pyparsing import empty
 
 mv = MegaVolt("config.yaml")
 
@@ -57,15 +56,19 @@ class CiscoInterface(object):
 
     @property
     def management(self) -> bool:
-        if "management" in self._hardware_type:
+        if 'management' in self._hardware_type:
             return True
         else:
-            return self.physical is True and "/" not in self.name
+            return self.name == 'FastEthernet0' or self.name == 'GigabitEthernet0'
 
     @property
     def type(self) -> str:
         if self.virtual:
             return "virtual"
+        if not self._media_type and 'FastEthernet' in self.name:
+            return '100base-t'
+        if self._media_type == "10/100-TX":
+            return '100base-t'
         if self._media_type == "10/100/1000-TX":
             return "1000base-t"
         if "Ten Gigabit" in self._hardware_type:
@@ -93,6 +96,13 @@ class CiscoInterface(object):
     @property
     def description(self) -> str:
         return self._description.strip() or None
+
+    @property
+    def ip(self) -> str:
+        return self._ip_address or None
+
+    def __repr__(self) -> str:
+        return f'<CiscoInterface: {self.name}>'
 
 
 device = mv.devices.get(name="REDC04CR01")
