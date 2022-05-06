@@ -1,0 +1,185 @@
+## adapted from https://github.com/tbotnz/ios-show-run-ttp
+
+hostname {{ hostname }}
+
+<group name="services">
+{{ call_home | set(False) }}
+{{ compress_config | set(False) }}
+{{ internal | set(False) }}
+{{ linenumber | set(False) }}
+{{ nagle | set(False) }}
+{{ password_encryption | set(False) }}
+{{ sequence_numbers | set(False) }}
+{{ tcp_keepalives_in | set(False) }}
+{{ tcp_keepalives_out | set(False) }}
+service call-home {{ call_home | set(True) }}
+service compress-config {{ compress_config | set(True) }}
+service internal {{ internal | set(True) }}
+service linenumber{{ linenumber | set(True) }}
+service nagle {{ nagle | set(True) }}
+service password-encryption {{ password_encryption | set(True) }}
+service sequence-numbers {{ sequence_numbers | set(True) }}
+service tcp-keepalives-in {{ tcp_keepalives_in | set(True) }}
+service tcp-keepalives-out {{ tcp_keepalives_out | set(True) }}
+</group>
+
+
+<group name="vrfs">
+vrf definition {{ name }}
+</group>
+
+enable secret {{ secret_type }} {{ secret_hash }}
+
+<group name="aaa.groups*">
+aaa group server {{ protocol }} {{ group }}
+<group name="aaa.groups.{{ group }}**">
+ server name {{ server }}
+</group>
+</group>
+
+<group name="interfaces.{{ interface }}**">
+interface {{ interface }}
+##{{ access_vlan | set(None) }}
+##{{ description | set(None) }}
+##{{ duplex | set(None) }}
+##{{ helper_addresses | set(None) }}
+##{{ mode | set(None) }}
+##{{ negotiation | set(None) }}
+##{{ primary_ipv4 | set(None) }}
+##{{ primary_ipv4_netmask | set(None) }}
+##{{ secondary_ipv4 | set(None) }}
+##{{ secondary_ipv4_netmask | set(None) }}
+##{{ speed | set(None) }}
+##{{ trunk_allowed_vlans | set(None) }}
+##{{ trunk_native_vlan | set(None) }}
+##{{ voice_vlan | set(None) }}
+##{{ vrf | set(None) }}
+ channel-group {{ channel_group_id | to_int }} mode {{ channel_group_mode }}
+ description {{ description | ORPHRASE }}
+ duplex {{ duplex }}
+ no ip proxy-arp {{ ip_proxy_arp | set(False) }}
+ no ip redirects {{ ip_redirects | set(False) }}
+ no ip unreachables {{ ip_unreachables | set(False) }}
+ no switchport {{ switchport_enabled | set(False) }}
+ power inline {{ power_inline }}
+ service-policy input {{ service_policy_input }}
+ service-policy output {{ service_policy_output }}
+ shutdown {{ shutdown | set(True) }}
+ spanning-tree bpduguard disable {{ spanning_tree_bpduguard_enabled | set(False) }}
+ spanning-tree portfast {{ spanning_tree_portfast_enabled | set(True) }}
+ speed {{ speed | to_int }}
+ switchport access vlan {{ switchport_access_vlan | to_int }}
+ switchport mode {{ switchport_mode }}
+ switchport nonegotiate {{ switchport_nonegotiate | set(True) }}
+ switchport port-security aging time {{ switchport_port_security_aging_time | to_int }}
+ switchport port-security aging type {{ switchport_port_security_aging_type }}
+ switchport port-security maximum {{ switchport_port_security_maximum | to_int }}
+ switchport port-security violation {{ switchport_port_security_violation }}
+ switchport port-security {{ switchport_port_security_enabled | set(True) }}
+ switchport trunk allowed vlan {{ switchport_trunk_allowed_vlans | unrange(rangechar='-', joinchar=',') | split(',') }}
+ switchport trunk native vlan {{ switchport_trunk_native_vlan | to_int }}
+ switchport voice vlan {{ switchport_voice_vlan | to_int }}
+ vrf forwarding {{ vrf }}
+<group name="ipv4_primary">
+ ip address {{ address }} {{ netmask }}
+</group>
+<group name="ipv4_secondary*">
+ ip address {{ address }} {{ netmask }} secondary
+</group>
+<group name="ip_helper_address" itemize="ip">
+ ip helper-address {{ ip }}
+</group>
+ ip pim dr-priority {{ ip_pim_dr_priority | to_int }}
+ ip pim {{ ip_pim_mode }}
+ ip ospf network {{ ip_ospf_network }}
+ ip ospf priority {{ ip_ospf_priority | to_int }}
+ ip ospf cost {{ ip_ospf_cost | to_int }}
+ ip ospf authentication {{ ip_ospf_auth_type }}
+ ip ospf message-digest-key {{ ip_ospf_auth_key_id | to_int }} md5 7 {{ ip_ospf_auth_key_hash }}
+ ip igmp access-group {{ ip_igmp_access_group }}
+</group>
+
+<group name="vlans">
+vlan {{ id | to_int }}
+ name {{ name }}
+</group>
+
+<group name="global.http_server">
+ip http server{{ enabled | set(True) }}
+no ip http server{{ enabled | set(False) }}
+</group>
+
+<group name="global.http_secure_server">
+ip http secure-server{{ enabled | set(True) }}
+no ip http secure-server{{ enabled | set(False) }}
+</group>
+
+
+<group name="global">
+{{ hostname | set(None) }}
+hostname {{ hostname | re(".+") }}
+ <group name="ip">
+{{ domain_name | set(None) }}
+{{ cef | set(False) }}
+{{ subnet_zero | set(False) }}
+{{ multicast_routing | set(False) }}
+{{ gratuitous_arps | set(False) }}
+{{ classless | set(False) }}
+ip domain name {{ domain_name }}
+ip subnet-zero {{ subnet_zero | set(True) }}
+ip cef {{ cef | set(True) }}
+ip subnet-zero {{ subnet_zero | set(True) }}
+ip classless {{ classless | set(True) }}
+ </group>
+</group>
+<group name="lldp">
+{{ enabled | set(False) }}
+lldp run{{ enabled | set(True) }}
+</group>
+
+<group name="cdp">
+{{ enabled | set(True) }}
+no cdp run{{ enabled | set(False) }}
+</group>
+
+<group name="scp_server">
+{{ enabled | set(False) }}
+ip scp server enable {{ enabled | set(True) }}
+</group>
+
+<group name="ssh">
+{{ auth_retries | set(None) }}
+{{ source_interface | set(None) }}
+{{ timeout | set(None) }}
+{{ version | set(1) }}
+ip ssh authentication-retries {{ auth_retries }}
+ip ssh source-interface {{ source_interface }}
+ip ssh time-out {{ timeout }}
+ip ssh version {{ version }}
+</group>
+
+<group name="vtp">
+vtp mode {{ mode }}
+vtp domain {{ domain }}
+</group>
+
+
+<group name="management.logging">
+logging facility {{ facility }}
+logging source-interface {{ source_interface }}
+<group name="hosts">
+logging {{ destination }}
+</group>
+</group>
+
+
+<group name="security.aaa">
+{{ new_model | set(False) }}
+aaa new-model {{ new_model | set(True) }}
+</group>
+
+<group name="management.local_users">
+username {{ username }} privilege {{ priv | to_int }} secret {{ secret_type | to_int }} {{ secret }}
+</group>
+
+
